@@ -6,8 +6,13 @@ from nltk.stem import WordNetLemmatizer
 import h5py
 import nltk
 import numpy as np
+import os
 import pandas as pd
 import re
+import swifter
+
+# Download wordnet from NLTK
+nltk.download('wordnet')
 
 # Unmodifiable variables
 months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September',
@@ -103,109 +108,114 @@ def extract_tokens(row, lemmatize=True, use_tag=True):
                     tok = re.sub(pattern, '', tok)
                     if not tok.isdigit():
                         token_list.append(tok)
-        # Record number of tokens processed during the full execution
-        count_iterations(display_freq=3)
     else:  # simply tokenize based on whitespaces
         token_list = tokenizer.tokenize(row['text'])
     return token_list
 
 
-# Load the blog dataset
-data_file = 'blogtext_sample' if use_sample else 'blogtext'
-blog_df = pd.read_csv('data/%s.csv' % data_file, encoding='utf8')
+# Main method for the file
+if __name__ == '__main__':
 
-# Initially filter all rows that contain unknown topics and short sentences
-keep = blog_df.apply(filter_blogs, axis=1)
-blog_df = blog_df[keep]
+    # Load the blog dataset
+    data_file = 'blogtext_sample' if use_sample else 'blogtext'
+    blog_df = pd.read_csv('data/%s.csv' % data_file, encoding='utf8')
 
-# Extract publication date information
-blog_df['date'] = blog_df.apply(lambda x: datetime.strptime(x['date'], '%d,%B,%Y'), axis=1)
-blog_df['year'] = blog_df.apply(lambda x: x['date'].year, axis=1)
-blog_df['month'] = blog_df.apply(lambda x: x['date'].month, axis=1)
+    # Initially filter all rows that contain unknown topics and short sentences
+    keep = blog_df.swifter.apply(filter_blogs, axis=1)
+    blog_df = blog_df[keep]
 
-# Extract age bracket information
-blog_df['age_bracket'] = blog_df.apply(lambda x: int(x['age'] / age_interval) * age_interval, axis=1)
+    # Extract publication date information
+    blog_df['date'] = blog_df.swifter.apply(lambda x: datetime.strptime(x['date'], '%d,%B,%Y'), axis=1)
+    blog_df['year'] = blog_df.swifter.apply(lambda x: x['date'].year, axis=1)
+    blog_df['month'] = blog_df.swifter.apply(lambda x: x['date'].month, axis=1)
 
-# Group documents by publication year/month and topics and remove documents within
-# categories that have less than a certain number of documents
-blog_df = blog_df.groupby(['year', 'month']).filter(lambda x: len(x) >= threshold)
-blog_df = blog_df.groupby('topic').filter(lambda x: len(x) >= threshold)
+    # Extract age bracket information
+    blog_df['age_bracket'] = blog_df.swifter.apply(lambda x: int(x['age'] / age_interval) * age_interval, axis=1)
 
-# Group the preprocessed blog dataset by the specified category
-if category == 'age':
-    blog_groups = blog_df.groupby('age_bracket')
-    test_category = 'topic'
-elif category == 'topic':
-    blog_groups = blog_df.groupby('topic')
-    test_category = 'age_bracket'
-else:
-    blog_groups = blog_df.groupby(['year', 'month'])
-    test_category = 'topic'
-num_groups = blog_groups.ngroups
+    # Group documents by publication year/month and topics and remove documents within
+    # categories that have less than a certain number of documents
+    blog_df = blog_df.groupby(['year', 'month']).filter(lambda x: len(x) >= threshold)
+    blog_df = blog_df.groupby('topic').filter(lambda x: len(x) >= threshold)
 
-# Create pointers to test indices
-test_category_list = blog_df[test_category].unique()
-test_pointers = dict(zip(test_category_list, range(len(test_category_list))))
+    # Group the preprocessed blog dataset by the specified category
+    if category == 'age':
+        blog_groups = blog_df.groupby('age_bracket')
+        test_category = 'topic'
+    elif category == 'topic':
+        blog_groups = blog_df.groupby('topic')
+        test_category = 'age_bracket'
+    else:
+        blog_groups = blog_df.groupby(['year', 'month'])
+        test_category = 'topic'
+    category_list = blog_groups
+    num_groups = blog_groups.ngroups
 
-# Obtain the vocabulary of the blog dataset
-blog_df['text'] = blog_df.apply(extract_tokens, axis=1)
-vocab = dict()
-for idx, text in enumerate(blog_df['text'].values):
-    for token in text:
-        if token in vocab:
-            vocab[token] += 1
-        else:
-            vocab[token] = 0
-print('size of original vocabulary: ', len(vocab))
+    # Create pointers to test indices
+    test_category_list = blog_df[test_category].unique()
+    test_pointers = dict(zip(test_category_list, range(len(test_category_list))))
 
-# Iterate over the vocabulary list and remove words that appear too frequently or infrequently
-word_count = sum(vocab.values())
-use_vocab = dict.fromkeys(vocab.keys(), True)
-vocab_items = [(k, v) for k, v in vocab.items()]
-for key, value in vocab_items:
-    freq = value / word_count
-    if freq > 1e-2 or freq < 1e-6:
-        vocab.pop(key, None)
-        use_vocab[key] = False
-print('size of new vocabulary: ', len(vocab))
+    # Obtain the vocabulary of the blog dataset
+    blog_df['text'] = blog_df.swifter.apply(extract_tokens, axis=1)
+    vocab = dict()
+    for idx, text in enumerate(blog_df['text'].values):
+        for token in text:
+            if token in vocab:
+                vocab[token] += 1
+            else:
+                vocab[token] = 0
+    print('size of original vocabulary: ', len(vocab))
 
-# Pre-allocate a h5py group that contains both term-context and ppmi matrix
-file = h5py.File('blog_dataset.h5', 'w')
-dataset_context = file.create_dataset('context', (len(vocab), len(vocab), num_groups), dtype=np.int, chunks=True)
-test_matrix = np.zeros((len(vocab), num_groups), dtype=np.int)
+    # Iterate over the vocabulary list and remove words that appear too frequently or infrequently
+    word_count = sum(vocab.values())
+    use_vocab = dict.fromkeys(vocab.keys(), True)
+    vocab_items = [(k, v) for k, v in vocab.items()]
+    for key, value in vocab_items:
+        freq = value / word_count
+        if freq > 1e-2 or freq < 1e-6:
+            vocab.pop(key, None)
+            use_vocab[key] = False
+    print('size of new vocabulary: ', len(vocab))
 
-# Compute the term-context matrix, grouped by categories
-print('======== computing term-context matrix ========')
-vocab_to_id = dict(zip(vocab, range(len(vocab))))
-for label, (_, group_df) in enumerate(blog_groups):
-    for text, info in zip(group_df['text'].values, group_df[test_category].values):
-        for ii, token in enumerate(text):
-            if use_vocab[token]:
-                word_idx = vocab_to_id[token]
-                test_matrix[word_idx][label] = test_pointers.get(info, -1)
-                for jj in range(max(0, ii - window_size), min(ii + window_size + 1, len(text))):
-                    if use_vocab[text[jj]]:
-                        context_idx = vocab_to_id[text[jj]]
-                        dataset_context[word_idx][context_idx][label] += 1
-    print('groups processed: %d (%s)' % (label, test_category_list[label]))
+    # Pre-allocate a h5py group that contains both term-context and ppmi matrix
+    path = 'blog_dataset_sample.h5' if use_sample else 'blog_dataset.h5'
+    file = h5py.File(path, 'w')
+    dataset_context = file.create_dataset('context', (len(vocab), len(vocab), num_groups), dtype=np.float32, chunks=True)
+    test_matrix = np.zeros((len(vocab), num_groups), dtype=np.int)
 
-# Allocate data storage for PPMI matrix and test-label matrix
-dataset_ppmi = file.create_dataset('ppmi', (len(vocab), len(vocab), num_groups), dtype=np.float32, chunks=True)
-dataset_label = file.create_dataset('label', (len(vocab), num_groups), dtype=np.int, data=test_matrix)
+    # Compute the term-context matrix, grouped by categories
+    print('======== computing term-context matrix ========')
+    vocab_to_id = dict(zip(vocab, range(len(vocab))))
+    for label, (_, group_df) in enumerate(blog_groups):
+        group_size = len(group_df['text'].values)
+        for cnt, txt, info in zip(range(group_size), group_df['text'].values, group_df[test_category].values):
+            if cnt > 0 and cnt % threshold == 0:
+                print('completed documents: ', cnt)
+            for ii, token in enumerate(txt):
+                if use_vocab[token]:
+                    word_idx = vocab_to_id[token]
+                    test_matrix[word_idx][label] = test_pointers.get(info, -1)
+                    for jj in range(max(0, ii - window_size), min(ii + window_size + 1, len(txt))):
+                        if use_vocab[txt[jj]]:
+                            context_idx = vocab_to_id[txt[jj]]
+                            dataset_context[word_idx][context_idx][label] += 1
+        print('groups processed: %d (%d documents)' % (label + 1, group_size))
 
-# Compute the PPMI matrix for every group and store results
-print('======== computing PPMI matrix ========')
-for idx in range(num_groups):
-    tc_matrix = tc_matrix_groups[:, :, idx]
-    full_sum = np.sum(tc_matrix)
-    row_sum = np.sum(tc_matrix, axis=1)
-    col_sum = np.sum(tc_matrix, axis=0)
-    outer_sum = np.outer(row_sum, col_sum) / full_sum**2
-    ppmi_matrix = np.maximum(np.log2(np.multiply(tc_matrix / (full_sum + 1e-6), 1 / (outer_sum + 1e-6)) + 1),
-                             np.zeros(np.shape(tc_matrix)))
-    dataset_ppmi[:, :, idx] = ppmi_matrix
-    print('groups processed: %d (%s)' % (idx, test_category_list[idx]))
+    # Allocate data storage for PPMI matrix and test-label matrix
+    dataset_ppmi = file.create_dataset('ppmi', (len(vocab), len(vocab), num_groups), dtype=np.float32, chunks=True)
+    dataset_label = file.create_dataset('label', (len(vocab), num_groups), dtype=np.int, data=test_matrix)
 
-# Delete the term-context matrix
-del file['context']
-print('dataset processing completed.')
+    # Compute the PPMI matrix for every group and store results
+    print('======== computing PPMI matrix ========')
+    for idx in range(num_groups):
+        tc_matrix = dataset_context[:, :, idx]
+        full_sum = np.sum(tc_matrix)
+        row_sum = np.sum(tc_matrix, axis=1)
+        col_sum = np.sum(tc_matrix, axis=0)
+        outer_sum = np.outer(row_sum, col_sum) / (full_sum**2 + 1e-6)
+        ppmi_matrix = np.maximum(np.log2(np.multiply(tc_matrix / (full_sum + 1e-6), 1 / (outer_sum + 1e-6)) + 1),
+                                 np.zeros(np.shape(tc_matrix)))
+        dataset_ppmi[:, :, idx] = ppmi_matrix
+        print('groups processed: ', idx + 1)
+
+    # Indicate that the pre-processing step has completed
+    print('dataset processing completed.')
