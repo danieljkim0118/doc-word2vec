@@ -13,6 +13,7 @@ import re
 months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September',
           'October', 'November', 'December']
 nltk_to_wordnet = {'N': wordnet.NOUN, 'V': wordnet.VERB, 'J': wordnet.ADJ, 'R': wordnet.ADV}
+count = 0
 
 # Modifiable parameters
 use_sample = False
@@ -53,33 +54,58 @@ def filter_blogs(row):
     return True
 
 
+# Counts number of iterations of a function
+# Inputs
+#   display_freq: the frequency at which to display execution status
+#                 relative to pre-defined threshold
+# Outputs
+#   print statements indicating number of iterative calls to the function
+def count_iterations(display_freq):
+    global count
+    count += 1
+    if count % (threshold / display_freq) == 0:
+        print('documents processed: ', count)
+
+
 # Generates a list of tokens for each blog text
 # Inputs
 #   row: a pandas dataframe object that represents each row of the table
 # Outputs
 #   token_list: a list of unique tokens present within the text
-def extract_tokens(row, lemmatize=True):
+def extract_tokens(row, lemmatize=True, use_tag=True):
     tokenizer = WhitespaceTokenizer()
-    if lemmatize:
-        pos_tags = PerceptronTagger().tag(tokenizer.tokenize(row['text']))
-        lemmatizer_input = map(lambda x: (x[0], nltk_to_wordnet.get(x[1][0])), pos_tags)
+    if lemmatize:  # reduce words to lemmas
+        pattern = '[().*+,?!\'\";:]*'
         token_list = list()
-        lemmatizer = WordNetLemmatizer()
-        for word, tag in lemmatizer_input:
-            if word != 'urlLink' and 'http:' not in word:
-                word = word.lower()
-                pattern = '[().*+,?!\'\";:]*'
-                if tag is None:
-                    tok = lemmatizer.lemmatize(word)
+        if use_tag:  # use POS tags to obtain more accurate lemmas
+            pos_tags = PerceptronTagger().tag(tokenizer.tokenize(row['text']))
+            lemmatizer_input = map(lambda x: (x[0], nltk_to_wordnet.get(x[1][0])), pos_tags)
+            lemmatizer = WordNetLemmatizer()
+            for word, tag in lemmatizer_input:
+                if word != 'urlLink' and 'http:' not in word:
+                    word = word.lower()
+                    if tag is None:
+                        tok = lemmatizer.lemmatize(word)
+                        tok = re.sub(pattern, '', tok)
+                        if not tok.isdigit():
+                            token_list.append(tok)
+                    else:
+                        tok = lemmatizer.lemmatize(word, tag)
+                        tok = re.sub(pattern, '', tok)
+                        if not tok.isdigit():
+                            token_list.append(tok)
+        else:  # do not use a tagger if not specified and speed up computation
+            lemmatizer_input = tokenizer.tokenize(row['text'])
+            lemmatizer = WordNetLemmatizer()
+            for word in lemmatizer_input:
+                if word != 'urlLink' and 'http:' not in word:
+                    tok = lemmatizer.lemmatize(word.lower())
                     tok = re.sub(pattern, '', tok)
                     if not tok.isdigit():
                         token_list.append(tok)
-                else:
-                    tok = lemmatizer.lemmatize(word, tag)
-                    tok = re.sub(pattern, '', tok)
-                    if not tok.isdigit():
-                        token_list.append(tok)
-    else:
+        # Record number of tokens processed during the full execution
+        count_iterations(display_freq=3)
+    else:  # simply tokenize based on whitespaces
         token_list = tokenizer.tokenize(row['text'])
     return token_list
 
@@ -125,14 +151,12 @@ test_pointers = dict(zip(test_category_list, range(len(test_category_list))))
 blog_df['text'] = blog_df.apply(extract_tokens, axis=1)
 vocab = dict()
 for idx, text in enumerate(blog_df['text'].values):
-    # if idx % threshold == 0:
-    #     print('Rows completed: ', idx)
     for token in text:
         if token in vocab:
             vocab[token] += 1
         else:
             vocab[token] = 0
-print(len(vocab))
+print('size of original vocabulary: ', len(vocab))
 
 # Iterate over the vocabulary list and remove words that appear too frequently or infrequently
 word_count = sum(vocab.values())
@@ -143,11 +167,15 @@ for key, value in vocab_items:
     if freq > 1e-2 or freq < 1e-6:
         vocab.pop(key, None)
         use_vocab[key] = False
-print(len(vocab))
+print('size of new vocabulary: ', len(vocab))
+
+# Pre-allocate a h5py group that contains both term-context and ppmi matrix
+file = h5py.File('blog_dataset.h5', 'w')
+dataset_context = file.create_dataset('context', (len(vocab), len(vocab), num_groups), dtype=np.int, chunks=True)
+test_matrix = np.zeros((len(vocab), num_groups), dtype=np.int)
 
 # Compute the term-context matrix, grouped by categories
-tc_matrix_groups = np.zeros((len(vocab), len(vocab), num_groups), dtype=np.float32)
-test_matrix = np.zeros((len(vocab), num_groups), dtype=np.int)
+print('======== computing term-context matrix ========')
 vocab_to_id = dict(zip(vocab, range(len(vocab))))
 for label, (_, group_df) in enumerate(blog_groups):
     for text, info in zip(group_df['text'].values, group_df[test_category].values):
@@ -156,15 +184,17 @@ for label, (_, group_df) in enumerate(blog_groups):
                 word_idx = vocab_to_id[token]
                 test_matrix[word_idx][label] = test_pointers.get(info, -1)
                 for jj in range(max(0, ii - window_size), min(ii + window_size + 1, len(text))):
-                    context_idx = vocab_to_id[text[jj]]
-                    tc_matrix_groups[word_idx][context_idx][label] += 1
+                    if use_vocab[text[jj]]:
+                        context_idx = vocab_to_id[text[jj]]
+                        dataset_context[word_idx][context_idx][label] += 1
+    print('groups processed: %d (%s)' % (label, test_category_list[label]))
 
-# Pre-allocate a h5py group that contains both ppmi matrix and
-file = h5py.File('blog_dataset.h5', 'w')
+# Allocate data storage for PPMI matrix and test-label matrix
 dataset_ppmi = file.create_dataset('ppmi', (len(vocab), len(vocab), num_groups), dtype=np.float32, chunks=True)
 dataset_label = file.create_dataset('label', (len(vocab), num_groups), dtype=np.int, data=test_matrix)
 
-# Compute the PPMI matrix for every group and save results
+# Compute the PPMI matrix for every group and store results
+print('======== computing PPMI matrix ========')
 for idx in range(num_groups):
     tc_matrix = tc_matrix_groups[:, :, idx]
     full_sum = np.sum(tc_matrix)
@@ -174,3 +204,8 @@ for idx in range(num_groups):
     ppmi_matrix = np.maximum(np.log2(np.multiply(tc_matrix / (full_sum + 1e-6), 1 / (outer_sum + 1e-6)) + 1),
                              np.zeros(np.shape(tc_matrix)))
     dataset_ppmi[:, :, idx] = ppmi_matrix
+    print('groups processed: %d (%s)' % (idx, test_category_list[idx]))
+
+# Delete the term-context matrix
+del file['context']
+print('dataset processing completed.')
