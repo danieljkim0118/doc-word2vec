@@ -3,6 +3,7 @@ from nltk.corpus import wordnet
 from nltk.tag import PerceptronTagger
 from nltk.tokenize import WhitespaceTokenizer
 from nltk.stem import WordNetLemmatizer
+import h5py
 import nltk
 import numpy as np
 import pandas as pd
@@ -13,11 +14,12 @@ months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'Augus
           'October', 'November', 'December']
 nltk_to_wordnet = {'N': wordnet.NOUN, 'V': wordnet.VERB, 'J': wordnet.ADJ, 'R': wordnet.ADV}
 
-# Modifiable variables
-threshold = 30
-age_interval = 5
-window_size = 5
-category = 'time'  # can also be 'age' or 'topic'
+# Modifiable parameters
+use_sample = False
+category = 'time'  # the category for representing word embeddings (other options are 'age' and 'topic').
+threshold = 30 if use_sample else 3000  # minimum number of documents for each group
+age_interval = 5  # size of each age bracket
+window_size = 5  # size of the context window (one-side length)
 
 
 # Checks whether string contains only English-related characters
@@ -56,7 +58,7 @@ def filter_blogs(row):
 #   row: a pandas dataframe object that represents each row of the table
 # Outputs
 #   token_list: a list of unique tokens present within the text
-def extract_tokens(row, lemmatize=False):
+def extract_tokens(row, lemmatize=True):
     tokenizer = WhitespaceTokenizer()
     if lemmatize:
         pos_tags = PerceptronTagger().tag(tokenizer.tokenize(row['text']))
@@ -64,35 +66,27 @@ def extract_tokens(row, lemmatize=False):
         token_list = list()
         lemmatizer = WordNetLemmatizer()
         for word, tag in lemmatizer_input:
-            if filter_token(word):
+            if word != 'urlLink' and 'http:' not in word:
                 word = word.lower()
+                pattern = '[().*+,?!\'\";:]*'
                 if tag is None:
-                    token = lemmatizer.lemmatize(word)
-                    token = re.sub('[().*+]+|[0-9]+', '', token)
-                    token_list.append(token)
+                    tok = lemmatizer.lemmatize(word)
+                    tok = re.sub(pattern, '', tok)
+                    if not tok.isdigit():
+                        token_list.append(tok)
                 else:
-                    token = lemmatizer.lemmatize(word, tag)
-                    token = re.sub('[().*+]+|[0-9]+', '', token)
-                    token_list.append(token)
+                    tok = lemmatizer.lemmatize(word, tag)
+                    tok = re.sub(pattern, '', tok)
+                    if not tok.isdigit():
+                        token_list.append(tok)
     else:
         token_list = tokenizer.tokenize(row['text'])
     return token_list
 
 
-# Determines whether to incorporate the token into the vocabulary
-# Inputs
-#   tok: the token of interest
-# Outputs
-# a boolean indicating whether to include the token (True) or not (False)
-def filter_token(tok):
-    if tok == 'urlLink':
-        return False
-    elif 'http:' in tok:
-        return False
-
-
 # Load the blog dataset
-blog_df = pd.read_csv('data/blogtext_sample.csv', encoding='utf8')
+data_file = 'blogtext_sample' if use_sample else 'blogtext'
+blog_df = pd.read_csv('data/%s.csv' % data_file, encoding='utf8')
 
 # Initially filter all rows that contain unknown topics and short sentences
 keep = blog_df.apply(filter_blogs, axis=1)
@@ -111,10 +105,28 @@ blog_df['age_bracket'] = blog_df.apply(lambda x: int(x['age'] / age_interval) * 
 blog_df = blog_df.groupby(['year', 'month']).filter(lambda x: len(x) >= threshold)
 blog_df = blog_df.groupby('topic').filter(lambda x: len(x) >= threshold)
 
-# Obtain the vocabulary of the entire blog dataset
-blog_df['tokens'] = blog_df.apply(extract_tokens, axis=1)
-vocab = {}
-for text in blog_df['tokens'].values:
+# Group the preprocessed blog dataset by the specified category
+if category == 'age':
+    blog_groups = blog_df.groupby('age_bracket')
+    test_category = 'topic'
+elif category == 'topic':
+    blog_groups = blog_df.groupby('topic')
+    test_category = 'age_bracket'
+else:
+    blog_groups = blog_df.groupby(['year', 'month'])
+    test_category = 'topic'
+num_groups = blog_groups.ngroups
+
+# Create pointers to test indices
+test_category_list = blog_df[test_category].unique()
+test_pointers = dict(zip(test_category_list, range(len(test_category_list))))
+
+# Obtain the vocabulary of the blog dataset
+blog_df['text'] = blog_df.apply(extract_tokens, axis=1)
+vocab = dict()
+for idx, text in enumerate(blog_df['text'].values):
+    # if idx % threshold == 0:
+    #     print('Rows completed: ', idx)
     for token in text:
         if token in vocab:
             vocab[token] += 1
@@ -122,21 +134,43 @@ for text in blog_df['tokens'].values:
             vocab[token] = 0
 print(len(vocab))
 
-# Compute the term-context matrix
-tc_matrix = np.zeros((len(vocab), len(vocab)))
-vocab_to_id = dict(zip(vocab, range(len(vocab))))
-for text in blog_df['tokens'].values:
-    for ii, token in enumerate(text):
-        word_idx = vocab_to_id[token]
-        for jj in range(max(0, ii - window_size), min(ii + window_size + 1, len(text))):
-            context_idx = vocab_to_id[text[jj]]
-            tc_matrix[word_idx][context_idx] += 1
+# Iterate over the vocabulary list and remove words that appear too frequently or infrequently
+word_count = sum(vocab.values())
+use_vocab = dict.fromkeys(vocab.keys(), True)
+vocab_items = [(k, v) for k, v in vocab.items()]
+for key, value in vocab_items:
+    freq = value / word_count
+    if freq > 1e-2 or freq < 1e-6:
+        vocab.pop(key, None)
+        use_vocab[key] = False
+print(len(vocab))
 
-# Compute the PPMI matrix
-full_sum = np.sum(tc_matrix)
-row_sum = np.sum(tc_matrix, axis=1)
-col_sum = np.sum(tc_matrix, axis=0)
-outer_sum = np.outer(row_sum, col_sum) / full_sum**2
-ppmi_matrix = np.maximum(np.log2(np.multiply(tc_matrix / (full_sum + 1e-6), 1 / (outer_sum + 1e-6)) + 1),
-                         np.zeros(np.shape(tc_matrix)))
-print(np.shape(ppmi_matrix))
+# Compute the term-context matrix, grouped by categories
+tc_matrix_groups = np.zeros((len(vocab), len(vocab), num_groups), dtype=np.float32)
+test_matrix = np.zeros((len(vocab), num_groups), dtype=np.int)
+vocab_to_id = dict(zip(vocab, range(len(vocab))))
+for label, (_, group_df) in enumerate(blog_groups):
+    for text, info in zip(group_df['text'].values, group_df[test_category].values):
+        for ii, token in enumerate(text):
+            if use_vocab[token]:
+                word_idx = vocab_to_id[token]
+                test_matrix[word_idx][label] = test_pointers.get(info, -1)
+                for jj in range(max(0, ii - window_size), min(ii + window_size + 1, len(text))):
+                    context_idx = vocab_to_id[text[jj]]
+                    tc_matrix_groups[word_idx][context_idx][label] += 1
+
+# Pre-allocate a h5py group that contains both ppmi matrix and
+file = h5py.File('blog_dataset.h5', 'w')
+dataset_ppmi = file.create_dataset('ppmi', (len(vocab), len(vocab), num_groups), dtype=np.float32, chunks=True)
+dataset_label = file.create_dataset('label', (len(vocab), num_groups), dtype=np.int, data=test_matrix)
+
+# Compute the PPMI matrix for every group and save results
+for idx in range(num_groups):
+    tc_matrix = tc_matrix_groups[:, :, idx]
+    full_sum = np.sum(tc_matrix)
+    row_sum = np.sum(tc_matrix, axis=1)
+    col_sum = np.sum(tc_matrix, axis=0)
+    outer_sum = np.outer(row_sum, col_sum) / full_sum**2
+    ppmi_matrix = np.maximum(np.log2(np.multiply(tc_matrix / (full_sum + 1e-6), 1 / (outer_sum + 1e-6)) + 1),
+                             np.zeros(np.shape(tc_matrix)))
+    dataset_ppmi[:, :, idx] = ppmi_matrix
