@@ -18,7 +18,6 @@ nltk.download('wordnet')
 months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September',
           'October', 'November', 'December']
 nltk_to_wordnet = {'N': wordnet.NOUN, 'V': wordnet.VERB, 'J': wordnet.ADJ, 'R': wordnet.ADV}
-count = 0
 
 # Modifiable parameters
 use_sample = False
@@ -57,19 +56,6 @@ def filter_blogs(row):
     elif row['date'].split(',')[1] not in months:
         return False
     return True
-
-
-# Counts number of iterations of a function
-# Inputs
-#   display_freq: the frequency at which to display execution status
-#                 relative to pre-defined threshold
-# Outputs
-#   print statements indicating number of iterative calls to the function
-def count_iterations(display_freq):
-    global count
-    count += 1
-    if count % (threshold / display_freq) == 0:
-        print('documents processed: ', count)
 
 
 # Generates a list of tokens for each blog text
@@ -177,13 +163,14 @@ if __name__ == '__main__':
     print('size of new vocabulary: ', len(vocab))
 
     # Pre-allocate a h5py group that contains both term-context and ppmi matrix
-    path = 'blog_dataset_sample.h5' if use_sample else 'blog_dataset.h5'
+    path = 'blog_dataset_sample_small.h5' if use_sample else 'blog_dataset.h5'
     file = h5py.File(path, 'w')
     dataset_context = file.create_dataset('context', (len(vocab), len(vocab), num_groups), dtype=np.float32, chunks=True)
     test_matrix = np.zeros((len(vocab), num_groups), dtype=np.int)
 
     # Compute the term-context matrix, grouped by categories
     print('======== computing term-context matrix ========')
+    docs_processed = 0
     vocab_to_id = dict(zip(vocab, range(len(vocab))))
     for label, (_, group_df) in enumerate(blog_groups):
         group_size = len(group_df['text'].values)
@@ -193,12 +180,13 @@ if __name__ == '__main__':
             for ii, token in enumerate(txt):
                 if use_vocab[token]:
                     word_idx = vocab_to_id[token]
-                    test_matrix[word_idx][label] = test_pointers.get(info, -1)
+                    test_matrix[word_idx, label] = test_pointers.get(info, -1)
                     for jj in range(max(0, ii - window_size), min(ii + window_size + 1, len(txt))):
                         if use_vocab[txt[jj]]:
                             context_idx = vocab_to_id[txt[jj]]
-                            dataset_context[word_idx][context_idx][label] += 1
-        print('groups processed: %d (%d documents)' % (label + 1, group_size))
+                            dataset_context[word_idx, context_idx, label] += 1
+        docs_processed += group_size
+        print('groups processed: %d (%d / %d documents)' % (label + 1, group_size, docs_processed))
 
     # Allocate data storage for PPMI matrix and test-label matrix
     dataset_ppmi = file.create_dataset('ppmi', (len(vocab), len(vocab), num_groups), dtype=np.float32, chunks=True)
