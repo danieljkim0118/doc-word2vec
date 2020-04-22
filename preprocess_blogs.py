@@ -20,7 +20,7 @@ months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'Augus
 nltk_to_wordnet = {'N': wordnet.NOUN, 'V': wordnet.VERB, 'J': wordnet.ADJ, 'R': wordnet.ADV}
 
 # Modifiable parameters
-use_sample = False
+use_sample = True
 category = 'time'  # the category for representing word embeddings (other options are 'age' and 'topic').
 threshold = 30 if use_sample else 3000  # minimum number of documents for each group
 age_interval = 5  # size of each age bracket
@@ -163,7 +163,7 @@ if __name__ == '__main__':
     print('size of new vocabulary: ', len(vocab))
 
     # Pre-allocate a h5py group that contains both term-context and ppmi matrix
-    path = 'blog_dataset_sample_small.h5' if use_sample else 'blog_dataset.h5'
+    path = 'blog_dataset_sample.h5' if use_sample else 'blog_dataset_age.h5'
     file = h5py.File(path, 'w')
     dataset_context = file.create_dataset('context', (len(vocab), len(vocab), num_groups), dtype=np.float32, chunks=True)
     test_matrix = np.zeros((len(vocab), num_groups), dtype=np.int)
