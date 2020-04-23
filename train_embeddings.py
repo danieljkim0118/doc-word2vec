@@ -37,7 +37,7 @@ def return_batch(num_vocabs, num_batch):
     return batch_output
 
 
-# Modifies word embeddings using BCD (Batch Coordinate Descent)
+# Modifies word embeddings using BCD (Block Coordinate Descent)
 # Inputs
 #   ppmi_mat: a batch of PPMI matrix of size B x V where B is the batch size and V is
 #             the size of the vocabulary
@@ -111,4 +111,5 @@ if __name__ == '__main__':
                 u_array[t, start:end, :] = train(ppmi_batch, w_curr, u_prev, u_next, start, end, t)
 
     # Indicate that the training step has completed
+    output_file.close()
     print('Training completed')

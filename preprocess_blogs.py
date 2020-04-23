@@ -163,7 +163,7 @@ if __name__ == '__main__':
     print('size of new vocabulary: ', len(vocab))
 
     # Pre-allocate a h5py group that contains both term-context and ppmi matrix
-    path = 'blog_dataset_sample.h5' if use_sample else 'blog_dataset_age.h5'
+    path = 'blog_dataset_sample.h5' if use_sample else 'blog_dataset_%s.h5' % category
     file = h5py.File(path, 'w')
     dataset_context = file.create_dataset('context', (len(vocab), len(vocab), num_groups), dtype=np.float32, chunks=True)
     test_matrix = np.zeros((len(vocab), num_groups), dtype=np.int)
@@ -206,4 +206,5 @@ if __name__ == '__main__':
         print('groups processed: ', idx + 1)
 
     # Indicate that the pre-processing step has completed
+    file.close()
     print('dataset processing completed.')
