@@ -21,7 +21,7 @@ months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'Augus
 nltk_to_wordnet = {'N': wordnet.NOUN, 'V': wordnet.VERB, 'J': wordnet.ADJ, 'R': wordnet.ADV}
 
 # Modifiable parameters
-use_sample = True
+use_sample = False
 category = 'time'  # the category for representing word embeddings (other options are 'age' and 'topic').
 threshold = 30 if use_sample else 3000  # minimum number of documents for each group
 age_interval = 5  # size of each age bracket

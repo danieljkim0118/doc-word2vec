@@ -1,11 +1,11 @@
 from scipy.io import loadmat
+import glob
 import h5py
 import numpy as np
-import os
 
 # Check number of files in directory
 path = './baseline'
-num = len(os.listdir(path))
+num = len(glob.glob1(path, "*.mat"))
 
 # Create new HDF file for storing baseline embeddings
 baseline_file = h5py.File('baseline_embeddings.h5', 'w')
