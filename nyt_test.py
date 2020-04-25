@@ -4,7 +4,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.manifold import TSNE
 
 # Open the sample dataset
-file = h5py.File('embeddings/embeddings-5iter.h5', 'r')
+file = h5py.File('baseline/embeddings-5iter.h5', 'r')
 
 for key in file.keys():
     print(key)
@@ -14,19 +14,21 @@ print("____TIME-BASED EMBEDDING____")
 embedding = file['U']
 print(embedding.shape)
 print(embedding[:, :, 1])
-print(embedding.shape[1])
+print("The number of words in the embedding is: " + str(embedding.shape[1]))
 
 
 def nearest_neighbors(index, time, num_neighbors):
     index_word = embedding[time, index, :]
 
-    top_indices = [0] * num_neighbors
-    top_similarities = [0] * num_neighbors
+    top_indices = [-2] * num_neighbors
+    top_similarities = [-2] * num_neighbors
 
-    for i in range(20936): # Size of NYT vocabulary
+    for i in range(embedding.shape[1]): # Size of NYT vocabulary dict is 20936, which is smaller than embedding.shape[1] (23086)
+    # for i in range(100):
         # Get vector and calculate similarity
         vec = embedding[time, i, :]
         similarity = cosine_similarity([index_word, vec])[0][1]
+        # print(index_to_word[i] + ": " + str(similarity))
 
         # Compare vector to most similar vectors
         top_found = False
@@ -42,6 +44,10 @@ def nearest_neighbors(index, time, num_neighbors):
                     top_similarities[j-1] = similarity
                     top_indices[j-1] = i
                     top_found = True
+            if j == 0 and top_similarities[j] > similarity:
+                top_found = True
+
+        # print(top_similarities)
 
     return top_indices
 
@@ -54,17 +60,21 @@ for i in range(len(index_to_word)):
 
 word = word_to_index["apple"]
 
-print("The index for apple is: " + str(word))
+print("The number of words in the conversion dictionary is: " + str(len(word_to_index)))
+
+print("The index for apple in the dictionary is: " + str(word))
+
+print("\nMOST SIMILAR WORDS TO APPLE:")
 
 similar_words = []
-for t in range(17):
+for t in range(1):
     similar_words += nearest_neighbors(word, t, 10)
 
 print(similar_words)
 
 
 xs = set(similar_words)
-for x in xs:
+for x in similar_words:
     try:
         print(index_to_word[x])
     except Exception as e:
