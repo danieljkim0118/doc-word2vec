@@ -6,6 +6,8 @@ import numpy as np
 input_path = 'blog_dataset.h5'
 input_file = h5py.File(input_path, 'r')
 ppmi = input_file['ppmi']
+labels = input_file['labels']
+labels_copy = copy.deepcopy(labels)
 
 # Unmodifiable constants
 vocab_size = ppmi.shape[0]
@@ -69,6 +71,9 @@ if __name__ == '__main__':
     w_array_slice = np.random.randn(vocab_size, dim) / np.sqrt(dim)
     w_array = np.array([copy.deepcopy(w_array_slice) for _ in timepoints])
     w_array = output_file.create_dataset('W', data=w_array, chunks=True)
+
+    # Add labels to the output dataset
+    output_file.create_dataset('labels', data=labels)
 
     # Obtain batch indices
     batches = return_batch(vocab_size, batch_size)

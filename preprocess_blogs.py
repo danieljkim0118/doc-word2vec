@@ -8,6 +8,7 @@ import nltk
 import numpy as np
 import os
 import pandas as pd
+import pickle
 import re
 import swifter
 
@@ -161,6 +162,11 @@ if __name__ == '__main__':
             vocab.pop(key, None)
             use_vocab[key] = False
     print('size of new vocabulary: ', len(vocab))
+
+    # Save the vocabulary list
+    vocab_path = 'blog_vocab.pkl'
+    with open(vocab_path, 'wb') as vocab_file:
+        pickle.dump(list(vocab.keys()), vocab_file, pickle.HIGHEST_PROTOCOL)
 
     # Pre-allocate a h5py group that contains both term-context and ppmi matrix
     path = 'blog_dataset_sample.h5' if use_sample else 'blog_dataset_%s.h5' % category
