@@ -30,7 +30,7 @@ Next, download preprocessed data from the [link](https://drive.google.com/open?i
 Rename the extracted files as indicated by the following table
 
 |Google Drive|Local Folder|
-|---|---|---|
+|---|---|
 |data1.tar.gz|blog_dataset.h5|
 |baseline_embeddings.tar.gz|baseline_embeddings.h5|
 |embeddings.tar.gz|embeddings-5iter.h5|
