@@ -4,6 +4,9 @@ Trajectory visualization for temporal embeddings per section 5.1 in Yao et al., 
 The 2D t-SNE projection of a word and its most similar words over various time slices are plotted with a user determined perplexity.
 
 ## How to Run
+After downloading the repo, download the baseline_embeddings.tar.gz we generated from https://drive.google.com/drive/folders/1UM289agQDAwjwO30izEh7dTI428suyww?usp=sharing.
+Unzip and place it in baseline/baseline_embeddings.h5
+
 To execute the baseline evaluation script, run the following in terminal:
 ```python3 nyt_trajectory.py```
 
