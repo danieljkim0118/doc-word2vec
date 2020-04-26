@@ -49,6 +49,7 @@ Ensure that the directory is set up as the following:
         -embeddings-5iter.h5
     -blog_dataset.h5
     -blog_vocab.pkl
+    -nyt_trajectory.py
     -preprocess_blogs.py
     -train_embeddings.py
 ```
@@ -94,7 +95,18 @@ Hyperparameters including number of training iterations, coefficients in the los
 The default word embeddings, trained over five iterations, are stored in the HDF file **embeddings-5iter.h5**.
 
 ## Evaluation
+To execute the baseline evaluation script, run the following in terminal:
+```python3 nyt_trajectory.py```
 
+It will prompt you with
+```Which word would you like to visualize the trajectory for?:```
+Type the word you would like to create a trajectory for
+
+Then, after it finds the most similar words at each time slice, it will prompt you to choose perplexity
+```Enter the perplexity value (5-50) for the tSNE projection or 'n' to quit:```
+This perplexity is used to generate a plot of a 2D t-SNE projection.
+After you close the plot, it will prompt you with this again, so you can generate projections with varying perplexities.
+Play with it and have fun! : )
 
 ## References
 1. Zijun Yao, Yifan Sun, Weicong Ding, Nikhil Rao, and Hui Xiong. 2018. Dynamic word embeddings for evolving semantic discovery. arXiv:1703.00607 (2018).
