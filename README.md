@@ -27,7 +27,7 @@ Next, download preprocessed data from the [link](https://drive.google.com/open?i
 
 `tar -zxvf embeddings.tar.gz`
 
-Rename the extracted files as indicated by the following table
+Rename the extracted files as indicated by the following table:
 
 |Google Drive|Local Folder|
 |---|---|
@@ -95,18 +95,27 @@ Hyperparameters including number of training iterations, coefficients in the los
 The default word embeddings, trained over five iterations, are stored in the HDF file **embeddings-5iter.h5**.
 
 ## Evaluation
-To execute the baseline evaluation script, run the following in terminal:
-```python3 nyt_trajectory.py```
+The baseline evaluation script computes the 2D t-SNE projection of a word and returns the most similar words, along with a plot over various time slices based on the user-determined perplexity value.
 
-It will prompt you with
+To execute the baseline evaluation script, run the following in the terminal:
+
+`python nyt_trajectory.py`
+
+The script will prompt the user with the following question: 
+
 ```Which word would you like to visualize the trajectory for?:```
-Type the word you would like to create a trajectory for
 
-Then, after it finds the most similar words at each time slice, it will prompt you to choose perplexity
+Enter the word to create a time-based trajectory based on the pre-existing word embeddings.
+
+After it finds the most similar words at each time slice, the code will prompt the user to choose the perplexity:
+
 ```Enter the perplexity value (5-50) for the tSNE projection or 'n' to quit:```
-This perplexity is used to generate a plot of a 2D t-SNE projection.
-After you close the plot, it will prompt you with this again, so you can generate projections with varying perplexities.
-Play with it and have fun! : )
+
+The perplexity value is used to generate a plot of a 2D tSNE projection. After closing the plot, it will prompt the user with this option again, so the user can generate projections with varying perplexities.
+
+Visualized results for the baseline embeddings can be found in the file **baseline.md**.
+
+Evaluation methods for feature-based word embeddings generated from the blog dataset will be added in the next iteration.
 
 ## References
 1. Zijun Yao, Yifan Sun, Weicong Ding, Nikhil Rao, and Hui Xiong. 2018. Dynamic word embeddings for evolving semantic discovery. arXiv:1703.00607 (2018).
