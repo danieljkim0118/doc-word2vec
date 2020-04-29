@@ -6,13 +6,13 @@ from nltk.stem import WordNetLemmatizer
 import h5py
 import nltk
 import numpy as np
-import os
 import pandas as pd
 import pickle
 import re
 import swifter
 
-# Download wordnet from NLTK
+# Download perceptron tagger and wordnet from NLTK
+nltk.download('averaged_perceptron_tagger')
 nltk.download('wordnet')
 
 # Unmodifiable variables
@@ -22,8 +22,8 @@ nltk_to_wordnet = {'N': wordnet.NOUN, 'V': wordnet.VERB, 'J': wordnet.ADJ, 'R': 
 
 # Modifiable parameters
 use_sample = False
-category = 'time'  # the category for representing word embeddings (other options are 'age' and 'topic').
-threshold = 30 if use_sample else 3000  # minimum number of documents for each group
+category = 'topic'  # the category for representing word embeddings (other options are 'age' and 'topic').
+threshold = 50 if use_sample else 3000  # minimum number of documents for each group
 age_interval = 5  # size of each age bracket
 window_size = 5  # size of the context window (one-side length)
 
@@ -112,28 +112,30 @@ if __name__ == '__main__':
     blog_df = blog_df[keep]
 
     # Extract publication date information
-    blog_df['date'] = blog_df.swifter.apply(lambda x: datetime.strptime(x['date'], '%d,%B,%Y'), axis=1)
-    blog_df['year'] = blog_df.swifter.apply(lambda x: x['date'].year, axis=1)
-    blog_df['month'] = blog_df.swifter.apply(lambda x: x['date'].month, axis=1)
-
+    if category == 'time':
+        blog_df['date'] = blog_df.swifter.apply(lambda x: datetime.strptime(x['date'], '%d,%B,%Y'), axis=1)
+        blog_df['year'] = blog_df.swifter.apply(lambda x: x['date'].year, axis=1)
+        blog_df['month'] = blog_df.swifter.apply(lambda x: x['date'].month, axis=1)
     # Extract age bracket information
-    blog_df['age_bracket'] = blog_df.swifter.apply(lambda x: int(x['age'] / age_interval) * age_interval, axis=1)
-
-    # Group documents by publication year/month and topics and remove documents within
-    # categories that have less than a certain number of documents
-    blog_df = blog_df.groupby(['year', 'month']).filter(lambda x: len(x) >= threshold)
-    blog_df = blog_df.groupby('topic').filter(lambda x: len(x) >= threshold)
-
-    # Group the preprocessed blog dataset by the specified category
-    if category == 'age':
-        blog_groups = blog_df.groupby('age_bracket')
-        test_category = 'topic'
-    elif category == 'topic':
-        blog_groups = blog_df.groupby('topic')
-        test_category = 'age_bracket'
     else:
+        blog_df['age_bracket'] = blog_df.swifter.apply(lambda x: int(x['age'] / age_interval) * age_interval, axis=1)
+
+    # Remove underrepresented samples and group the preprocessed blog dataset by the specified category
+    if category == 'time':
+        blog_df = blog_df.groupby(['year', 'month']).filter(lambda x: len(x) >= threshold)
+        blog_df = blog_df.groupby('topic').filter(lambda x: len(x) >= threshold)
         blog_groups = blog_df.groupby(['year', 'month'])
         test_category = 'topic'
+    elif category == 'age':
+        blog_df = blog_df.groupby('age_bracket').filter(lambda x: len(x) >= threshold)
+        blog_df = blog_df.groupby('topic').filter(lambda x: len(x) >= threshold)
+        blog_groups = blog_df.groupby('age_bracket')
+        test_category = 'topic'
+    else:  # topic is used as default category
+        blog_df = blog_df.groupby('topic').filter(lambda x: len(x) >= threshold)
+        blog_df = blog_df.groupby('age_bracket').filter(lambda x: len(x) >= threshold)
+        blog_groups = blog_df.groupby('topic')
+        test_category = 'age_bracket'
     category_list = blog_groups
     num_groups = blog_groups.ngroups
 
@@ -164,7 +166,7 @@ if __name__ == '__main__':
     print('size of new vocabulary: ', len(vocab))
 
     # Save the vocabulary list
-    vocab_path = 'blog_vocab.pkl'
+    vocab_path = 'blog_vocab_%s.pkl' % category
     with open(vocab_path, 'wb') as vocab_file:
         pickle.dump(list(vocab.keys()), vocab_file, pickle.HIGHEST_PROTOCOL)
 

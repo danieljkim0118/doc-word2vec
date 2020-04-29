@@ -3,7 +3,7 @@ import h5py
 import numpy as np
 
 # Load the PPMI matrix
-input_path = 'blog_dataset.h5'
+input_path = 'data/blog_dataset_age.h5'
 input_file = h5py.File(input_path, 'r')
 ppmi = input_file['ppmi']
 labels = input_file['labels']
@@ -22,7 +22,7 @@ dim = 50
 batch_size = int(vocab_size / 4)
 
 # Initialize output file name
-file_path = 'embeddings-' + str(num_iter) + 'iter'
+file_path = 'embeddings-age-' + str(num_iter) + 'iter'
 
 
 # Returns batch information for training the vocabulary set
