@@ -3,12 +3,38 @@ import pandas as pd
 import swifter
 from preprocess_blogs import extract_tokens, filter_blogs
 
+
+# Computes similarity between every pair of topics
+# Inputs
+#   vt_matrix: the vocab-topic matrix of size V x T, where V is the number of terms and
+#              T is the number of topics
+#   metric: 'cosine' computes cosine similarity, 'jaccard' computes jaccard similarity
+#           and 'dice' computes dice similarity
+# Outputs
+#   sim_matrix: the cosine-similarity matrix of size T x T
+def compute_similarity(vt_matrix, metric='cosine'):
+    n_topics = np.size(vt_matrix, axis=-1)
+    sim_matrix = np.zeros((n_topics, n_topics))
+    for ii in range(n_topics):
+        u = vt_matrix[:, ii]
+        for jj in range(n_topics):
+            v = vt_matrix[:, jj]
+            if metric == 'cosine':
+                sim_matrix[ii, jj] = np.dot(u, v) / (np.linalg.norm(u) * np.linalg.norm(v))
+            elif metric in ['jaccard', 'dice']:
+                sim_matrix[ii, jj] = np.sum(np.minimum(u, v)) / np.sum(np.maximum(u, v))
+                if metric == 'dice':
+                    sim_matrix[ii, jj] = 2 * sim_matrix[ii, jj] / (1 + sim_matrix[ii, jj])
+    return sim_matrix
+
+
 # Define hyperparameters used in the pre-processing step for topic-based category
 age_interval = 5
-threshold = 30
+threshold = 3000
+method = 'dice'
 
 # Load the blog dataset
-blog_df = pd.read_csv('data/blogtext_sample_large.csv', encoding='utf8')
+blog_df = pd.read_csv('data/blogtext.csv', encoding='utf8')
 
 # Filter rows with unknown topics and short sentences
 keep = blog_df.swifter.apply(filter_blogs, axis=1)
@@ -44,7 +70,7 @@ use_vocab = dict.fromkeys(vocab.keys(), True)
 vocab_items = [(k, v) for k, v in vocab.items()]
 for key, value in vocab_items:
     freq = value / word_count
-    if freq > 1e-2 or freq < 1e-4:
+    if freq > 1e-2 or freq < 1e-6:
         vocab.pop(key, None)
         use_vocab[key] = False
 print('size of new vocabulary: ', len(vocab))
@@ -56,9 +82,9 @@ vocab_to_id = dict(zip(vocab, range(len(vocab))))
 # Iterate over every row of the blog dataset and update the vocab-topic matrix
 for _, row in blog_df.iterrows():
     token_list = row['text']
+    topic = row['topic']
     for token in token_list:
         if use_vocab[token]:
-            topic = row['topic']
             vocab_topic_matrix[vocab_to_id[token], topic_to_id[topic]] += 1
 
 
@@ -66,8 +92,8 @@ for _, row in blog_df.iterrows():
 tf_matrix = np.log10(vocab_topic_matrix + 1) + 1
 idf_matrix = np.log10(num_topics / np.sum(np.heaviside(vocab_topic_matrix, 0), axis=1))
 tf_idf_matrix = (tf_matrix.T * idf_matrix).T
-similarity_1 = np.dot(tf_idf_matrix.T, tf_idf_matrix)
-similarity_1 = np.multiply(similarity_1.T, 1 / np.amax(similarity_1, axis=1)).T
+similarity_1 = compute_similarity(tf_idf_matrix, metric=method)
+np.save('topics_tf-idf_%s.npy' % method, similarity_1)
 print(similarity_1)
 
 # Compute the PPMI matrix
@@ -77,11 +103,6 @@ col_sum = np.sum(vocab_topic_matrix, axis=0)
 outer_sum = np.outer(row_sum, col_sum) / (full_sum ** 2 + 1e-6)
 ppmi_matrix = np.maximum(np.log2(np.multiply(vocab_topic_matrix / (full_sum + 1e-6), 1 / (outer_sum + 1e-6)) + 1),
                          np.zeros(np.shape(vocab_topic_matrix)))
-similarity_2 = np.dot(ppmi_matrix.T, ppmi_matrix)
-similarity_2 = np.multiply(similarity_2.T, 1 / np.amax(similarity_2, axis=1)).T
+similarity_2 = compute_similarity(ppmi_matrix, metric=method)
+np.save('topics_ppmi_%s.npy' % method, similarity_2)
 print(similarity_2)
-
-
-print(vocab_topic_matrix[:10, :10])
-print(tf_idf_matrix[:10, :10])
-print(ppmi_matrix[:10, :10])
