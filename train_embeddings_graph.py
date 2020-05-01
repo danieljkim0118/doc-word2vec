@@ -22,12 +22,12 @@ indices = range(ppmi.shape[-1])
 num_iter = 5
 lmb = 10
 gam = 100
-tau = 50
+tau = 30
 dim = 50
-batch_size = int(vocab_size / 4)
+batch_size = int(vocab_size)
 
 # Initialize output file name
-file_path = 'embeddings-%s-' % category + str(num_iter) + 'iter'
+file_path = 'embeddings-%s-ppmi_cosine-' % category + str(num_iter) + 'iter'
 
 
 # Inverse sigmoid function
@@ -96,14 +96,14 @@ def return_batch(num_vocabs, num_batch):
 #   topic_idx: the index at which the batch embedding is trained
 # Outputs
 #   u_mat: optimizing matrix batch of size B x D
-def train(ppmi_mat, w_input, weights, start_idx, finish_idx, topic_idx):
+def train(ppmi_mat, u_input, w_input, weights, start_idx, finish_idx, topic_idx):
     w_mat = w_input[topic_idx, :, :]
     w_square = np.dot(w_mat.T, w_mat)
     a_mat = w_square + (gam + lmb + tau) * np.eye(dim)
     weights_slice = copy.deepcopy(weights[topic_idx, :])
     weights_slice = modify_weights(weights_slice, option='tanh', scale=4)
-    d_mat = np.tensordot(weights_slice, w_mat[start_idx:finish_idx, :] - w_input[:, start_idx:finish_idx, :],
-                         axes=([0], [0]))
+    weights_slice[topic_idx] = 0
+    d_mat = np.tensordot(weights_slice, u_input[:, start_idx:finish_idx, :], axes=([0], [0]))
     b_mat = np.dot(ppmi_mat, w_mat) + gam * w_mat[start_idx:finish_idx, :] + tau * d_mat
     u_mat = np.linalg.lstsq(a_mat.T, b_mat.T, rcond=None)[0]
     return u_mat.T
@@ -130,7 +130,7 @@ if __name__ == '__main__':
     # Iterate and train word embeddings
     for iter_idx in range(num_iter):
         print('==========ITERATION %d==========' % (iter_idx + 1))
-        indices_train = np.random.permutation(indices) if iter_idx > 0 else indices
+        indices_train = np.random.permutation(indices)
         # Iterate over shuffled indices
         for enum, idx in enumerate(indices_train):
             print('Group: %d' % (enum + 1))
@@ -144,8 +144,8 @@ if __name__ == '__main__':
                 except MemoryError:
                     print('Please use a smaller batch size than %d' % batch_size)
                 # Train the U and W matrices
-                w_array[idx, start:end, :] = train(ppmi_batch, u_array, topic_matrix, start, end, idx)
-                u_array[idx, start:end, :] = train(ppmi_batch, w_array, topic_matrix, start, end, idx)
+                w_array[idx, start:end, :] = train(ppmi_batch, w_array, u_array, topic_matrix, start, end, idx)
+                u_array[idx, start:end, :] = train(ppmi_batch, u_array, w_array, topic_matrix, start, end, idx)
 
     # Indicate that the training step has completed
     output_file.close()
