@@ -3,11 +3,12 @@ import h5py
 import numpy as np
 
 # Load the PPMI matrix
-input_path = 'data/blog_dataset_age.h5'
+category = 'age'
+input_path = 'blog_dataset_%s.h5' % category
 input_file = h5py.File(input_path, 'r')
 ppmi = input_file['ppmi']
-labels = input_file['labels']
-labels_copy = copy.deepcopy(labels)
+labels = input_file['label']
+labels_copy = copy.deepcopy(np.asarray(labels))
 
 # Unmodifiable constants
 vocab_size = ppmi.shape[0]
@@ -22,7 +23,7 @@ dim = 50
 batch_size = int(vocab_size / 4)
 
 # Initialize output file name
-file_path = 'embeddings-age-' + str(num_iter) + 'iter'
+file_path = 'embeddings-%s-' % category + str(num_iter) + 'iter'
 
 
 # Returns batch information for training the vocabulary set
