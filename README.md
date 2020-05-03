@@ -31,9 +31,17 @@ Rename the extracted files as indicated by the following table:
 
 |Google Drive|Local Folder|
 |---|---|
-|data1.tar.gz|blog_dataset.h5|
+|data1.tar.gz|blog_dataset_time.h5|
+|data2.tar.gz|blog_dataset_age.h5|
+|data3.tar.gz|blog_dataset_topic.h5|
 |baseline_embeddings.tar.gz|baseline_embeddings.h5|
-|embeddings.tar.gz|embeddings-5iter.h5|
+|embeddings.tar.gz|embeddings-time-5iter.h5, embeddings-age-5iter.h5|
+|embeddings.topic.gz|embeddings-topic-human-5iter.h5, embeddings-topic-ppmi_cosine-5iter.h5|
+|blog_vocab_date.pkl|blog_vocab_date.pkl|
+|blog_vocab_age.pkl|blog_vocab_age.pkl|
+|blog_vocab_topic.pkl|blog_vocab_topic.pkl|
+|topics_human.npy|topics_human.npy|
+|topics_ppmi_cosine.npy|topics_ppmi_cosine.npy|
 
 The raw dataset can be downloaded [here](https://www.kaggle.com/rtatman/blog-authorship-corpus), and must be named as **blogtext.csv** for the preprocessing code to function properly.
 
@@ -45,13 +53,27 @@ Ensure that the directory is set up as the following:
         -baseline_vocab.pkl
     |-data
         -blogtext.csv
+        -topics_human.npy
+        -topics_ppmi_cosine.npy
     |-embeddings
-        -embeddings-5iter.h5
-    -blog_dataset.h5
-    -blog_vocab.pkl
+        -embeddings-time-5iter.h5
+        -embeddings-age-5iter.h5
+        -embeddings-topic-human-5iter.h5
+        -embeddings-topic-ppmi_cosine-5iter.h5
+    -blog_dataset_age.h5
+    -blog_dataset_time.h5
+    -blog_dataset_topic.h5
+    -blog_vocab_age.pkl
+    -blog_vocab_date.pkl
+    -blog_vocab_topic.pkl
+    -blog_trajectory.py
+    -generate_expert_adj.py
     -nyt_trajectory.py
     -preprocess_blogs.py
+    -score.py
+    -topic_relations.py
     -train_embeddings.py
+    -train_embeddings_graph.py
 ```
 
 Again, check that the project directory structure and file names match the format provided above.
@@ -86,15 +108,33 @@ The PPMI matrices generated over different values of user-selected category (def
 ## Training
 The three-dimensional PPMI matrices generated serve as inputs to a custom loss function to train word embeddings. As mentioned in the previous paper, Block Coordinate Descent (BCD) is used to effectively train word embeddings through improved asymptotic runtime.
 
-To train the word embeddings, run the following in the command line:
+First, word embeddings spanning either publication dates or age brackets can be trained using a sequential approach. To train the word embeddings, run the following in the command line:
 
 `python train_embeddings.py`
 
 Hyperparameters including number of training iterations, coefficients in the loss function, embedding dimension and batch size can be tuned within the file.
 
-The default word embeddings, trained over five iterations, are stored in the HDF file **embeddings-5iter.h5**.
+The word embeddings, trained over five iterations, are stored in HDF files **embeddings-time-5iter.h5** or **embeddings-age-5iter.h5** in the **embeddings** folder.
 
-## Evaluation
+Next, topic-based word embeddings can be trained using a graph approach, using the adjacency matrix computed by either humans in **topics_human.npy** or by document-based similarity measure in **topics_ppmi_cosine.npy**. Both adjacency matrices are stored in the **data** folder. To train the graph-based embeddings, run:
+
+`python train_embeddings_graph.py`
+
+Again, hyperparameters such as adjacency matrix option, number of training iterations, embeddings dimension, etc. can be tuned within the file.
+
+The word embeddings, trained over five iterations, are stored in the HDF file **embeddings-topic-5iter.h5** in the **embeddings** folder.
+
+If interested in generating the adjacency matrix itself, run
+
+`python generate_expert_adj.py`
+
+to input custom user opinions or run
+
+`python topic_relations.py`
+
+to generate the document-based topic adjacency matrix.
+
+## Baseline Evaluation
 The baseline evaluation script computes the 2D t-SNE projection of a word and returns the most similar words, along with a plot over various time slices based on the user-determined perplexity value.
 
 To execute the baseline evaluation script, run the following in the terminal:
@@ -116,6 +156,58 @@ The perplexity value is used to generate a plot of a 2D tSNE projection. After c
 Visualized results for the baseline embeddings can be found in the file **baseline.md**.
 
 Evaluation methods for feature-based word embeddings generated from the blog dataset will be added in the next iteration.
+
+## Trajectory Visualization
+Trajectory visualization for temporal embeddings per section 5.1 in [Yao et al., 2018](https://arxiv.org/pdf/1703.00607.pdf)
+
+The 2D t-SNE projection of a word and its most similar words over various time slices are plotted with a user determined perplexity.
+
+After downloading the repo, download **baseline_embeddings.tar.gz** from the [drive](https://drive.google.com/drive/folders/1UM289agQDAwjwO30izEh7dTI428suyww?usp=sharing) and extract it locally as described above.
+
+To execute the baseline evaluation script, run the following in terminal:
+
+`python nyt_trajectory.py`
+
+To execute the extension evaluation script, run the following in terminal:
+
+`python blog_trajectory.py`
+
+The user will be prompted with
+
+`Which word would you like to visualize the trajectory for?:`
+
+Type the word to create a trajectory for
+
+Then, after it finds the most similar words at each time slice, it will prompt the user to choose perplexity
+
+`Enter the perplexity value (5-50) for the tSNE projection or 'n' to quit:`
+
+This perplexity is used to generate a plot of a 2D t-SNE projection.
+After closing the plot, it will prompt the user with this again, so the user can generate projections with varying perplexities.
+
+## How To Run Quantitative Analysis
+We implement the semantic similarity baselines outlined in section 6.1 of [Yao et al., 2018](https://arxiv.org/pdf/1703.00607.pdf). 
+In particular, we are clustering words according to their embeddings via spherical k-means. (The evaluation script currently uses k=10). Then, we use Normalized Mutual Information (NML) and F-Score to determine semantic similarity. 
+
+To execute the extension evaluation script, run the following in terminal:
+
+`python score.py`
+
+The user will be prompted with
+
+`To select an embedding, enter a number 0 through 4:`
+
+Enter the number corresponding with the embedding to evaluate.
+
+|index|category|
+|---|---|
+|0| Static|  
+|1| Time | 
+|2| Age | 
+|3| Topic (Computer Similarity) |
+|4| Topic (Human Similarity) |
+
+The script will then output the NMF and F_beta scores, as well as a numpy array assigning a cluster to each word in the embedding.
 
 ## References
 1. Zijun Yao, Yifan Sun, Weicong Ding, Nikhil Rao, and Hui Xiong. 2018. Dynamic word embeddings for evolving semantic discovery. arXiv:1703.00607 (2018).
