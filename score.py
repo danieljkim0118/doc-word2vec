@@ -10,16 +10,20 @@ from sklearn.decomposition import PCA
 # Script that computes NMF and F_beta using an embedding, topics, and a number of clusters
 def semantic_similarity(word_vecs, topics, k, beta=5):
     # Show PCA plot for debugging purposes
-    print("Displaying Data...")
-    pca = PCA(n_components=2)
-    reduced = pca.fit_transform(word_vecs)
-    t = reduced.transpose()
-    plt.scatter(t[0], t[1])
-    plt.show()
+    # print("Displaying Data...")
+    # pca = PCA(n_components=2)
+    # reduced = pca.fit_transform(word_vecs)
+    # t = reduced.transpose()
+    # plt.scatter(t[0], t[1])
+    # plt.show()
 
     # Generate Cluster
     print("Clustering...")
     kmeans = KMeans(n_clusters=k, random_state=0).fit(word_vecs)
+
+    # Save cluster data
+    print("Saving clusters to" + 'clusters-' + str(choice) + '.npy...')
+    np.save('clusters-' + str(choice) + '.npy', kmeans.labels_)
 
     # Compute NMF
     print("Computing NMF...")
@@ -95,8 +99,8 @@ print("Loading dataset...")
 if choice == 0:
     file = h5py.File(file_str, 'r')
 
-    for key in file.keys():
-        print(key)
+    # for key in file.keys():
+    #     print(key)
 
     dataset = file['ppmi']
     word_vecs = dataset[:, :, 0]
@@ -113,13 +117,13 @@ else:
     file = h5py.File('embeddings/blog_dataset_sample.h5', 'r')
     topics = file['label'][:, 0]
 
-    print(dataset.shape)
-    print(dataset[:, :, 1])
-
-print("The length of topics is: " + str(len(topics)))
-print("The length of the embedding dict is: " + str(len(embedding_word_to_index)))
-print("The length of the embedding is: " + str(len(word_vecs)))
-input()
+#     print(dataset.shape)
+#     print(dataset[:, :, 1])
+#
+# print("The length of topics is: " + str(len(topics)))
+# print("The length of the embedding dict is: " + str(len(embedding_word_to_index)))
+# print("The length of the embedding is: " + str(len(word_vecs)))
+# input()
 
 # Translate the topic labels to the dictionary of the embedding
 if choice == 0:
@@ -130,7 +134,8 @@ else:
         try:
             new_topics[embedding_word_to_index[label_index_to_word[i]]] = topics[i]
         except Exception as e:
-            print(e)
+            # print(e)
+            pass
 
 k = 10
 semantic_similarity(word_vecs, new_topics, k)

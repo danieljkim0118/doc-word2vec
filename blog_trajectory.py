@@ -47,16 +47,16 @@ else:
 print("Loading dataset...")
 file = h5py.File(file_str, 'r')
 
-for key in file.keys():
-    print(key)
+# for key in file.keys():
+#     print(key)
 
 embedding = file['U']
 
 file = h5py.File('embeddings/blog_dataset_sample.h5', 'r')
 topics = file['label'][:, 0]
 
-print(embedding.shape)
-print(embedding[:, :, 1])
+# print(embedding.shape)
+# print(embedding[:, :, 1])
 
 
 # Utility script to find the <num_neighbors> nearest neighbors to the word <index> at a given <time> slice
@@ -100,7 +100,7 @@ index_to_word = pickle.load(file)
 word_to_index = {}
 for i in range(len(index_to_word)):
     word_to_index[index_to_word[i]] = i
-print("The number of words in the conversion dictionary is: " + str(len(word_to_index)))
+# print("The number of words in the conversion dictionary is: " + str(len(word_to_index)))
 
 
 # Take user input for word to plot
